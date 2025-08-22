@@ -5,10 +5,10 @@ import ErrorHandler, {
 import { userModel } from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import { sendVerificationCode } from "../utils/sendVerificationCode.js";
+import { sendToken } from "../utils/sendToken.js";
 
 export const register = catchAsyncErrors(async (req, res, next) => {
   try {
-    console.log("req.body", req.body);
     const { name, email, password } = req.body || {};
     if (!name || !email || !password) {
       return next(new ErrorHandler("Please enter all fields", 400));
@@ -60,7 +60,7 @@ export const register = catchAsyncErrors(async (req, res, next) => {
 });
 
 export const verifyOtp = catchAsyncErrors(async (req, res, next) => {
-  const { email, otp } = req.body;
+  const { email, otp } = req.body || {};
 
   if (!email || !otp) {
     return next(new ErrorHandler("Email or otp is missing.", 400));
@@ -74,7 +74,7 @@ export const verifyOtp = catchAsyncErrors(async (req, res, next) => {
       })
       .sort({ createdAt: -1 });
 
-    if (!userAllEntries) {
+    if (!userAllEntries.length) {
       return next(new ErrorHandler("User not found.", 404));
     }
 
@@ -90,7 +90,7 @@ export const verifyOtp = catchAsyncErrors(async (req, res, next) => {
       user = userAllEntries[0];
     }
 
-    if (user.verificationCode !== Number(otp)) {
+    if (user.verificationCode != otp) {
       return next(new ErrorHandler("Invalid otp", 400));
     }
 
@@ -114,3 +114,34 @@ export const verifyOtp = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Internal server error.", 500));
   }
 });
+
+export const login=catchAsyncErrors(async(req, res, next)=>{
+  const {email, password}=req.body || {}
+
+  if(!email || !password){
+    return next(new ErrorHandler("Enter all fields", 400))
+  }
+
+  const user=await userModel.findOne({
+    email,
+    accountVerified:true
+  }).select("+password")
+
+  if(!user){
+    return next(new ErrorHandler("Invalid email or password", 400))
+  }
+
+  const isPasswordMached=await bcrypt.compare(password, user.password)
+  if(!isPasswordMached){
+    return next(new ErrorHandler("Invalid email or password", 400))
+  }
+
+  sendToken(user, 200, "User login successful", res)
+})
+
+export const logout=catchAsyncErrors(async(req, res, next)=>{
+  res.status(200).cookie("token", "", {
+    expires:new Date(Date.now()),
+    httpOnly:true
+  }).json({success:true, message:"Logged out successfully"})
+})

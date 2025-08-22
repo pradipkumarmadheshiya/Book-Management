@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import jwt from "jsonwebtoken"
 
 const userSchema=new mongoose.Schema({
     name:{
@@ -9,7 +10,7 @@ const userSchema=new mongoose.Schema({
     email:{
         type:String,
         required:true,
-        lowerCase:true
+        lowercase:true
     },
     password:{
         type:String,
@@ -63,6 +64,10 @@ userSchema.methods.generateVerificationCode=function(){
     this.verificationCode=verificationCode
     this.verificationCodeExpire=Date.now()+15*60*1000
     return verificationCode
+}
+
+userSchema.methods.generateToken=function(){
+    return jwt.sign({id:this._id}, process.env.JWT_SECRET_KEY, {expiresIn:process.env.JWT_EXPIRE})
 }
 
 export const userModel=mongoose.model("User", userSchema)
