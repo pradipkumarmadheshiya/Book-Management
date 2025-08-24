@@ -3,13 +3,22 @@ import {bookModel} from "../models/book.model.js"
 import {userModel} from "../models/user.model.js"
 import {borrowModel} from "../models/borrow.model.js"
 import ErrorHandler from "../middlewares/error.middleware.js"
+import {calculateFine} from "../utils/calculateFine.js"
 
 export const borrowedBooks= catchAsyncErrors(async(req, res, next)=>{
-
+    const {borrowedBooks} = req.user
+    res.status(200).json({
+        success:true,
+        borrowedBooks
+    })
 })
 
 export const getBorrowedBooksForAdmin= catchAsyncErrors(async(req, res, next)=>{
-
+    const borrowedBooks = await bookModel.find()
+    res.status(200).json({
+        success:true,
+        borrowedBooks
+    })
 })
 
 export const recordBorrowedBooks= catchAsyncErrors(async(req, res, next)=>{
@@ -67,5 +76,52 @@ export const recordBorrowedBooks= catchAsyncErrors(async(req, res, next)=>{
 })
 
 export const returnBorrowedBooks= catchAsyncErrors(async(req, res, next)=>{
-    
+    const {bookId}=req.params
+    const {email}=req.body || {}
+    const book=await bookModel.findById(bookId)
+
+    if(!book){
+        return next(new ErrorHandler("Book not found", 404))
+    }
+
+    const user=await userModel.findOne({email, accountVerified:true})
+
+    if(!user){
+        return next(new ErrorHandler("User not found", 404))
+    }
+
+    const borrowedBook=user.borrowedBooks.find(b=>b.bookId.toString()===bookId && b.returned===false)
+
+    if(!borrowedBook){
+        return next(new ErrorHandler("You have not borrowed this book", 400))
+    }
+
+    borrowedBook.returned=true
+    await user.save()
+
+    book.quantity+=1
+    book.availability=book.availability>0
+    await book.save()
+
+    const borrow=await borrowModel.findOne({
+        book:bookId,
+        "user.email":email,
+        returnDate:null
+    })
+
+    if(!borrow){
+        return next(new ErrorHandler("Book not borrowed", 400))
+    }
+
+    borrow.returnDate=new Date()
+
+    const fine=calculateFine(borrow.dueDate)
+    borrow.fine=fine
+
+    await borrow.save()
+
+    res.status(200).json({
+        success:true,
+        message:fine!==0 ? `The book has been returned successfully. The total charges including a fine are ₹${fine+book.price}` : `The book has been returned successfully. The total charges are ${book.price}`
+    })
 })
